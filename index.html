@@ -266,7 +266,7 @@
               <span class="key">↓ / S</span>
               <span class="key">SHIFT 대시</span><span class="key">SPACE 일시정지</span>
             </div>
-            <div class="mission">NORMAL: 30초 생존 + 1,200점 · HARD: HP 1 + 위험구역 강화 · 마지막 8초는 RUSH</div>
+            <div class="mission">NORMAL 1,200점 · HARD 1,800점 · EXTREME 2,600점 / HP 1 / 레이저·폭발 대폭 강화</div>
             <button class="primary" id="startBtn" style="margin-top:16px;padding:12px 18px">🔥 털러 가기</button>
           </div>
         </div>
@@ -300,6 +300,7 @@
         <div class="rule"><b>💨 SHIFT 대시</b>짧은 순간 무적 상태로 빠르게 이동합니다. 재사용 대기시간 0.9초.</div>
         <div class="rule"><b>⚠ 위험구역</b>붉은 원이 깜빡인 뒤 폭발합니다. 경고를 보고 즉시 이동하세요.</div>
         <div class="rule"><b>🔥 RUSH</b>마지막 8초에는 레이저·위험구역이 더 빠르게 몰아칩니다.</div>
+        <div class="rule"><b>☠ EXTREME</b>HP 1 · 레이저 약 1.75배 · 폭발 경고시간 단축 · 대시 쿨타임 증가 · 아이템 감소.</div>
       </div>
     </section>
 
@@ -324,11 +325,13 @@
 
       <div class="section">
         <h3>🔥 게임 모드</h3>
-        <div class="difficulty">
-          <button id="normalMode" class="active">NORMAL<br><span class="muted">기본 규칙</span></button>
-          <button id="hardMode">HARD<br><span class="muted">HP 1 · 레이저 강화</span></button>
+        <div class="difficulty" style="grid-template-columns:repeat(3,1fr)">
+          <button id="normalMode" class="active">NORMAL<br><span class="muted">기본</span></button>
+          <button id="hardMode">HARD<br><span class="muted">HP 1</span></button>
+          <button id="extremeMode">EXTREME<br><span class="muted">지옥 모드</span></button>
         </div>
         <div class="stat-row"><span>HARD 보정</span><b>점수 ×1.5</b></div>
+        <div class="stat-row"><span>EXTREME 보정</span><b>점수 ×2.0</b></div>
         <div class="muted" style="font-size:11.5px;line-height:1.5;margin-top:7px">
           ※ 과제의 A/B 난이도 20회 비교는 NORMAL에서 진행하는 것을 권장합니다.
         </div>
@@ -425,7 +428,7 @@
 
   function resetGame(){
     running=false;paused=false;ended=false;
-    timeLeft=30;score=0;combo=0;hp=(gameMode==='HARD'?1:3);gemTimer=0;laserTimer=0;powerTimer=3.5;
+    timeLeft=30;score=0;combo=0;hp=(gameMode==='NORMAL'?3:1);gemTimer=0;laserTimer=0;powerTimer=3.5;
     magnetTime=0;shield=0;superFeverTime=0;maxCombo=0;
     dashCooldown=0;dashTime=0;dashDX=0;dashDY=0;screenShake=0;rushTriggered=false;
     gems=[];lasers=[];particles=[];powerups=[];dangerZones=[];trail=[];
@@ -450,7 +453,7 @@
     ui.hp.textContent='❤'.repeat(hp)+'♡'.repeat(3-hp);
     ui.best.textContent=Math.round(store.best||0).toLocaleString();
     ui.modeLabel.textContent=gameMode;
-    ui.modeLabel.style.color=gameMode==='HARD'?'#ff5f7a':'#7cffcb';
+    ui.modeLabel.style.color=gameMode==='EXTREME'?'#ff315c':(gameMode==='HARD'?'#ff5f7a':'#7cffcb');
     const buffs=[];
     if(shield>0) buffs.push('🛡');
     if(magnetTime>0) buffs.push('🧲'+magnetTime.toFixed(1));
@@ -461,7 +464,7 @@
   }
 
   function spawnGem(){
-    const golden=Math.random() < (superFeverTime>0 ? .18 : .07);
+    const golden=Math.random() < (superFeverTime>0 ? (gameMode==='EXTREME'?.12:.18) : (gameMode==='EXTREME'?.04:.07));
     gems.push({
       x:30+Math.random()*(W-60),y:-24,
       r:golden?16:12+Math.random()*4,
@@ -486,11 +489,11 @@
   function spawnLaser(){
     const vertical=Math.random()<.5;
     if(vertical){
-      const boost=gameMode==='HARD'?1.35:1;
+      const boost=gameMode==='EXTREME'?1.75:(gameMode==='HARD'?1.35:1);
       lasers.push({x:30+Math.random()*(W-60),y:-80,w:12,h:95,vx:0,vy:(220+Math.random()*70)*boost});
     }else{
       const fromLeft=Math.random()<.5;
-      const boost=gameMode==='HARD'?1.35:1;
+      const boost=gameMode==='EXTREME'?1.75:(gameMode==='HARD'?1.35:1);
       lasers.push({x:fromLeft?-100:W+100,y:60+Math.random()*(H-120),w:100,h:12,vx:(fromLeft?1:-1)*(250+Math.random()*80)*boost,vy:0});
     }
   }
@@ -500,9 +503,9 @@
     dangerZones.push({
       x:margin+Math.random()*(W-margin*2),
       y:margin+Math.random()*(H-margin*2),
-      r:(gameMode==='HARD'?54:46)+Math.random()*12,
+      r:(gameMode==='EXTREME'?68:(gameMode==='HARD'?54:46))+Math.random()*14,
       t:0,
-      warn:gameMode==='HARD'?.52:.68,
+      warn:gameMode==='EXTREME'?.38:(gameMode==='HARD'?.52:.68),
       blast:.24,
       hit:false
     });
@@ -515,7 +518,7 @@
     if(dx===0&&dy===0){ dy=-1; }
     const len=Math.hypot(dx,dy)||1;
     dashDX=dx/len;dashDY=dy/len;
-    dashTime=.18;dashCooldown=.9;player.inv=Math.max(player.inv,.22);
+    dashTime=.18;dashCooldown=(gameMode==='EXTREME'?1.25:.9);player.inv=Math.max(player.inv,gameMode==='EXTREME'?.16:.22);
     burst(player.x,player.y,'#e7fbff',18);
     beep(520,.055,'sawtooth',.035);
     screenShake=.12;
@@ -580,14 +583,22 @@
     }
     if(powerTimer<=0){
       spawnPowerup();
-      powerTimer=5.3+Math.random()*2.6;
+      powerTimer=(gameMode==='EXTREME'?8.5:5.3)+Math.random()*(gameMode==='EXTREME'?3.5:2.6);
     }
-    if(Math.random() < dt * ((timeLeft<=8)?1.15:(gameMode==='HARD'?.68:.46))){
-      if(dangerZones.length < (gameMode==='HARD'?3:2)) spawnDangerZone();
+    if(Math.random() < dt * (
+      timeLeft<=8
+        ? (gameMode==='EXTREME'?2.25:(gameMode==='HARD'?1.45:1.15))
+        : (gameMode==='EXTREME'?1.15:(gameMode==='HARD'?.68:.46))
+    )){
+      const maxZones=gameMode==='EXTREME'?5:(gameMode==='HARD'?3:2);
+      if(dangerZones.length < maxZones) spawnDangerZone();
     }
     const baseGap=difficulty==='A'?.95:.70;
-    let laserGap=gameMode==='HARD'?Math.max(.42,baseGap*.72):baseGap;
-    if(timeLeft<=8) laserGap*=.62;
+    let laserGap =
+      gameMode==='EXTREME' ? Math.max(.26,baseGap*.48) :
+      gameMode==='HARD' ? Math.max(.42,baseGap*.72) :
+      baseGap;
+    if(timeLeft<=8) laserGap*=gameMode==='EXTREME'?.48:.62;
     if(laserTimer<=0){spawnLaser();laserTimer=laserGap}
 
     for(const g of gems){g.y+=g.vy*dt;g.rot+=dt*3}
@@ -624,7 +635,7 @@
           const comboMult=fever?2:Math.min(1+Math.floor(combo/3)*.5,2);
           const superMult=superFeverTime>0?3:1;
           const goldenMult=g.golden?5:1;
-          const modeMult=gameMode==='HARD'?1.5:1;
+          const modeMult=gameMode==='EXTREME'?2:(gameMode==='HARD'?1.5:1);
           const gain=Math.round(100*comboMult*superMult*goldenMult*modeMult);
           score+=gain;
           const fxColor=g.golden?'#fff19a':(superFeverTime>0?'#ffd166':(fever?'#ffd166':'#56d8ff'));
@@ -699,8 +710,8 @@
         const d=Math.hypot(player.x-cx,player.y-cy);
         if(d>player.r && d<player.r+22){
           l.nearAwarded=true;
-          score+=50;combo++;maxCombo=Math.max(maxCombo,combo);
-          showToast('NEAR MISS +50','#a67cff');
+          score+=(gameMode==='EXTREME'?30:50);combo++;maxCombo=Math.max(maxCombo,combo);
+          showToast(gameMode==='EXTREME'?'NEAR MISS +30':'NEAR MISS +50','#a67cff');
           beep(760,.035,'triangle',.025);
         }
       }
@@ -712,7 +723,7 @@
     particles=particles.filter(p=>p.life>0);
 
     if(timeLeft<=0){
-      const target=gameMode==='HARD'?1800:1200;
+      const target=gameMode==='EXTREME'?2600:(gameMode==='HARD'?1800:1200);
       const success=score>=target && hp>0;
       endGame(success,success?`30초를 버티며 ${target.toLocaleString()}점 목표를 넘겼습니다.`:`30초는 버텼지만 ${target.toLocaleString()}점에 도달하지 못했습니다.`);
       return;
@@ -897,8 +908,11 @@
     gameMode=mode;
     $('normalMode').classList.toggle('active',mode==='NORMAL');
     $('hardMode').classList.toggle('active',mode==='HARD');
+    $('extremeMode').classList.toggle('active',mode==='EXTREME');
     syncUI();
-    showToast(mode==='HARD'?'HARD MODE 🔥':'NORMAL MODE', mode==='HARD'?'#ff5f7a':'#7cffcb');
+    const label=mode==='EXTREME'?'EXTREME MODE ☠️':(mode==='HARD'?'HARD MODE 🔥':'NORMAL MODE');
+    const color=mode==='EXTREME'?'#ff315c':(mode==='HARD'?'#ff5f7a':'#7cffcb');
+    showToast(label,color);
   }
 
   document.addEventListener('keydown',e=>{
@@ -915,6 +929,7 @@
   ui.diffA.onclick=()=>setDiff('A');ui.diffB.onclick=()=>setDiff('B');
   $('normalMode').onclick=()=>setGameMode('NORMAL');
   $('hardMode').onclick=()=>setGameMode('HARD');
+  $('extremeMode').onclick=()=>setGameMode('EXTREME');
 
   $('muteBtn').onclick=()=>{
     muted=!muted;store.settings.mute=muted;saveStore();
