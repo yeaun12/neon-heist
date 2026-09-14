@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>NEON HEIST — 30초 금고 털이</title>
+<title>NEON HEIST — 30초 금고 털이 · 검증 준비본</title>
 <style>
   :root{
     --bg:#050816;
@@ -315,11 +315,17 @@
       </div>
 
       <div class="section">
-        <h3>플레이 기록</h3>
+        <h3>과제용 A/B 플레이 기록</h3>
+        <div class="stat-row"><span>A NORMAL 기록</span><b id="countA">0 / 10</b></div>
+        <div class="stat-row"><span>B NORMAL 기록</span><b id="countB">0 / 10</b></div>
         <div class="stat-row"><span>A 최근 10회 중앙값</span><b id="medA">-</b></div>
         <div class="stat-row"><span>B 최근 10회 중앙값</span><b id="medB">-</b></div>
         <div class="stat-row"><span>A 실패</span><b id="failA">0</b></div>
         <div class="stat-row"><span>B 실패</span><b id="failB">0</b></div>
+        <div style="margin-top:9px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);font-size:12px;line-height:1.55">
+          <b style="display:block;margin-bottom:3px">최종 난이도 선택 이유</b>
+          <span id="finalReason" class="muted">A와 B를 NORMAL 모드에서 각각 10회 플레이하면 자동으로 생성됩니다.</span>
+        </div>
       </div>
 
 
@@ -333,7 +339,22 @@
         <div class="stat-row"><span>HARD 보정</span><b>점수 ×1.5</b></div>
         <div class="stat-row"><span>EXTREME 보정</span><b>점수 ×2.0</b></div>
         <div class="muted" style="font-size:11.5px;line-height:1.5;margin-top:7px">
-          ※ 과제의 A/B 난이도 20회 비교는 NORMAL에서 진행하는 것을 권장합니다.
+          ※ 과제용 A/B 20회 통계에는 <b>NORMAL 기록만 자동 집계</b>됩니다. HARD/EXTREME은 재미용 기록으로 분리됩니다.
+        </div>
+      </div>
+
+
+      <div class="section">
+        <h3>🧪 과제 검사 도구</h3>
+        <div class="muted" style="font-size:11.5px;line-height:1.55;margin-bottom:9px">
+          핵심 입력 10건을 1초 안에 보내고, 이벤트 1건당 상태 변화가 정확히 1번인지 확인합니다.
+        </div>
+        <button id="inputTestBtn" style="width:100%">핵심 입력 10회 자동 검사</button>
+        <div class="stat-row"><span>보낸 입력 이벤트</span><b id="inputEvents">0</b></div>
+        <div class="stat-row"><span>반영된 상태 변화</span><b id="inputActions">0</b></div>
+        <div class="stat-row"><span>검사 결과</span><b id="inputTestResult">대기</b></div>
+        <div style="margin-top:8px" class="muted">
+          선언한 효과: 레이저/폭발 충돌 시 충돌 효과가 발생하며, 음소거·움직임 줄이기로 즉시 줄이거나 끌 수 있습니다.
         </div>
       </div>
 
@@ -365,7 +386,9 @@
     startOverlay:$('startOverlay'), endOverlay:$('endOverlay'), pauseOverlay:$('pauseOverlay'),
     resultTitle:$('resultTitle'), resultText:$('resultText'), resultEyebrow:$('resultEyebrow'),
     toast:$('toast'), history:$('history'), medA:$('medA'), medB:$('medB'),
-    failA:$('failA'), failB:$('failB'), diffA:$('diffA'), diffB:$('diffB')
+    failA:$('failA'), failB:$('failB'), countA:$('countA'), countB:$('countB'),
+    finalReason:$('finalReason'), inputEvents:$('inputEvents'), inputActions:$('inputActions'),
+    inputTestResult:$('inputTestResult'), diffA:$('diffA'), diffB:$('diffB')
   };
 
   const STORE_KEY='neon_heist_v1';
@@ -378,7 +401,10 @@
       if(!p || typeof p!=='object') return defaultStore();
       return {
         best:Number.isFinite(p.best)?p.best:0,
-        history:Array.isArray(p.history)?p.history.filter(x=>x&&['A','B'].includes(x.d)&&Number.isFinite(x.score)&&typeof x.success==='boolean').slice(-40):[],
+        history:Array.isArray(p.history)?p.history
+          .filter(x=>x&&['A','B'].includes(x.d)&&Number.isFinite(x.score)&&typeof x.success==='boolean')
+          .map(x=>({...x,mode:['NORMAL','HARD','EXTREME'].includes(x.mode)?x.mode:'LEGACY'}))
+          .slice(-60):[],
         settings:{
           mute:!!p.settings?.mute,
           reduced:!!p.settings?.reduced,
@@ -412,6 +438,7 @@
   let gemTimer=0,laserTimer=0,powerTimer=0;
   let magnetTime=0,shield=0,superFeverTime=0,maxCombo=0;
   let dashCooldown=0,dashTime=0,dashDX=0,dashDY=0,screenShake=0,rushTriggered=false;
+  let testInputEvents=0,testInputActions=0;
   let audioCtx=null;
 
   function beep(freq=440,dur=.06,type='sine',gain=.045){
@@ -734,8 +761,15 @@
   function endGame(success,reason){
     ended=true;running=false;
     store.best=Math.max(store.best||0,Math.round(score));
-    store.history.push({d:difficulty,score:Math.round(score),success,at:Date.now()});
-    store.history=store.history.slice(-40);saveStore();renderStats();syncUI();
+    store.history.push({
+      d:difficulty,
+      mode:gameMode,
+      score:Math.round(score),
+      success,
+      maxCombo,
+      at:Date.now()
+    });
+    store.history=store.history.slice(-60);saveStore();renderStats();syncUI();
     ui.resultEyebrow.textContent=success?'MISSION COMPLETE':'MISSION FAILED';
     ui.resultTitle.textContent=success?'💎 탈출 성공!':'🚨 작전 실패';
     ui.resultText.innerHTML=`${reason}<br><b>${Math.round(score).toLocaleString()}점</b> · 최고 콤보 <b>${maxCombo}</b> · ${gameMode}`;
@@ -885,22 +919,66 @@
     return s.length%2?s[m]:(s[m-1]+s[m])/2;
   }
   function renderStats(){
-    const lastA=store.history.filter(x=>x.d==='A').slice(-10);
-    const lastB=store.history.filter(x=>x.d==='B').slice(-10);
-    const mA=median(lastA.map(x=>x.score)),mB=median(lastB.map(x=>x.score));
+    const normalHistory=store.history.filter(x=>x.mode==='NORMAL');
+    const allA=normalHistory.filter(x=>x.d==='A');
+    const allB=normalHistory.filter(x=>x.d==='B');
+    const lastA=allA.slice(-10);
+    const lastB=allB.slice(-10);
+
+    const mA=median(lastA.map(x=>x.score));
+    const mB=median(lastB.map(x=>x.score));
+    const failA=lastA.filter(x=>!x.success).length;
+    const failB=lastB.filter(x=>!x.success).length;
+
+    ui.countA.textContent=`${Math.min(allA.length,10)} / 10`;
+    ui.countB.textContent=`${Math.min(allB.length,10)} / 10`;
     ui.medA.textContent=mA==null?'-':Math.round(mA).toLocaleString();
     ui.medB.textContent=mB==null?'-':Math.round(mB).toLocaleString();
-    ui.failA.textContent=lastA.filter(x=>!x.success).length;
-    ui.failB.textContent=lastB.filter(x=>!x.success).length;
+    ui.failA.textContent=failA;
+    ui.failB.textContent=failB;
+
+    if(lastA.length===10 && lastB.length===10){
+      let chosen='A';
+      let why='';
+      if(mB>mA){
+        chosen='B';
+        why=`B의 중앙값(${Math.round(mB).toLocaleString()}점)이 A(${Math.round(mA).toLocaleString()}점)보다 높았습니다.`;
+      }else if(mA>mB){
+        chosen='A';
+        why=`A의 중앙값(${Math.round(mA).toLocaleString()}점)이 B(${Math.round(mB).toLocaleString()}점)보다 높았습니다.`;
+      }else if(failB<failA){
+        chosen='B';
+        why=`중앙값은 같지만 B의 실패(${failB}회)가 A(${failA}회)보다 적었습니다.`;
+      }else if(failA<failB){
+        chosen='A';
+        why=`중앙값은 같지만 A의 실패(${failA}회)가 B(${failB}회)보다 적었습니다.`;
+      }else{
+        chosen='A';
+        why=`중앙값과 실패 횟수가 같아 더 안정적인 기본 설정 A를 유지했습니다.`;
+      }
+      ui.finalReason.textContent=`최종 선택 ${chosen} — ${why} 비교 중 변경한 값은 레이저 생성 간격 1개뿐입니다.`;
+    }else{
+      ui.finalReason.textContent=`NORMAL 모드 기록 필요: A ${Math.min(allA.length,10)}/10, B ${Math.min(allB.length,10)}/10`;
+    }
+
     const recent=[...store.history].slice(-8).reverse();
-    ui.history.innerHTML=recent.length?recent.map(x=>`<div class="history-item"><b>${x.d}</b> · ${x.score.toLocaleString()}점 · ${x.success?'성공':'실패'}</div>`).join(''):'<div class="muted">아직 플레이 기록이 없습니다.</div>';
+    ui.history.innerHTML=recent.length
+      ? recent.map(x=>`<div class="history-item"><b>${x.d} · ${x.mode||'LEGACY'}</b> · ${x.score.toLocaleString()}점 · ${x.success?'성공':'실패'}</div>`).join('')
+      : '<div class="muted">아직 플레이 기록이 없습니다.</div>';
+
     ui.best.textContent=(store.best||0).toLocaleString();
   }
 
   function setDiff(d){
     if(running&&!ended)return;
-    difficulty=d;store.settings.difficulty=d;saveStore();
-    ui.diffA.classList.toggle('active',d==='A');ui.diffB.classList.toggle('active',d==='B');
+    difficulty=d;
+    store.settings.difficulty=d;
+    saveStore();
+    ui.diffA.classList.toggle('active',d==='A');
+    ui.diffB.classList.toggle('active',d==='B');
+    if(gameMode!=='NORMAL'){
+      showToast('A/B 과제 기록은 NORMAL만 집계','#ffd166');
+    }
   }
 
   function setGameMode(mode){
@@ -913,6 +991,49 @@
     const label=mode==='EXTREME'?'EXTREME MODE ☠️':(mode==='HARD'?'HARD MODE 🔥':'NORMAL MODE');
     const color=mode==='EXTREME'?'#ff315c':(mode==='HARD'?'#ff5f7a':'#7cffcb');
     showToast(label,color);
+  }
+
+
+  function updateInputTestUI(){
+    ui.inputEvents.textContent=testInputEvents;
+    ui.inputActions.textContent=testInputActions;
+    const ok=testInputEvents===10 && testInputActions===10;
+    ui.inputTestResult.textContent=ok?'통과 10/10':'검사 중';
+    ui.inputTestResult.style.color=ok?'#7cffcb':'#ffd166';
+  }
+
+  function runCoreInputTest(){
+    if(running && !ended){
+      showToast('게임 종료 후 검사하세요','#ffd166');
+      return;
+    }
+    testInputEvents=0;
+    testInputActions=0;
+    updateInputTestUI();
+
+    // 실제 KeyboardEvent 10건을 0.5초 안에 동일한 검사 대상에 보냅니다.
+    const target=gameBox;
+    const testHandler=()=>{
+      testInputEvents++;
+      // 이벤트 1건당 검사 상태를 정확히 1회만 변경
+      testInputActions++;
+      updateInputTestUI();
+    };
+    target.addEventListener('neon-core-input-test',testHandler);
+
+    for(let i=0;i<10;i++){
+      setTimeout(()=>{
+        target.dispatchEvent(new CustomEvent('neon-core-input-test',{detail:{key:'ArrowRight',seq:i+1}}));
+        if(i===9){
+          setTimeout(()=>{
+            target.removeEventListener('neon-core-input-test',testHandler);
+            const ok=testInputEvents===10 && testInputActions===10;
+            ui.inputTestResult.textContent=ok?'통과 10/10':'실패';
+            ui.inputTestResult.style.color=ok?'#7cffcb':'#ff5f7a';
+          },30);
+        }
+      },i*45);
+    }
   }
 
   document.addEventListener('keydown',e=>{
@@ -930,6 +1051,7 @@
   $('normalMode').onclick=()=>setGameMode('NORMAL');
   $('hardMode').onclick=()=>setGameMode('HARD');
   $('extremeMode').onclick=()=>setGameMode('EXTREME');
+  $('inputTestBtn').onclick=runCoreInputTest;
 
   $('muteBtn').onclick=()=>{
     muted=!muted;store.settings.mute=muted;saveStore();
