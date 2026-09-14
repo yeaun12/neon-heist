@@ -362,7 +362,7 @@
       <div class="section">
         <h3>🧪 과제 검사 도구</h3>
         <div class="muted" style="font-size:11.5px;line-height:1.55;margin-bottom:9px">
-          핵심 입력 10건을 1초 안에 보내고, 이벤트 1건당 상태 변화가 정확히 1번인지 확인합니다.
+          실제 ArrowRight 키보드 입력 10건을 1초 안에 보내고, keydown 1건당 입력 상태가 정확히 1번 바뀌는지 확인합니다.
         </div>
         <button id="inputTestBtn" style="width:100%">핵심 입력 10회 자동 검사</button>
         <div class="stat-row"><span>보낸 입력 이벤트</span><b id="inputEvents">0</b></div>
@@ -453,7 +453,7 @@
   let gemTimer=0,laserTimer=0,powerTimer=0;
   let magnetTime=0,shield=0,superFeverTime=0,maxCombo=0;
   let dashCooldown=0,dashTime=0,dashDX=0,dashDY=0,screenShake=0,rushTriggered=false;
-  let testInputEvents=0,testInputActions=0;
+  let testInputEvents=0,testInputActions=0,inputTestActive=false;
   let audioCtx=null;
 
   function beep(freq=440,dur=.06,type='sine',gain=.045){
@@ -1024,28 +1024,30 @@
     }
     testInputEvents=0;
     testInputActions=0;
+    inputTestActive=true;
     updateInputTestUI();
 
-    // 실제 KeyboardEvent 10건을 0.5초 안에 동일한 검사 대상에 보냅니다.
-    const target=gameBox;
-    const testHandler=()=>{
-      testInputEvents++;
-      // 이벤트 1건당 검사 상태를 정확히 1회만 변경
-      testInputActions++;
-      updateInputTestUI();
-    };
-    target.addEventListener('neon-core-input-test',testHandler);
-
+    // 실제 게임의 keydown/keyup 리스너로 ArrowRight 입력 10건을 0.5초 안에 보냅니다.
     for(let i=0;i<10;i++){
       setTimeout(()=>{
-        target.dispatchEvent(new CustomEvent('neon-core-input-test',{detail:{key:'ArrowRight',seq:i+1}}));
+        document.dispatchEvent(new KeyboardEvent('keydown',{
+          key:'ArrowRight',
+          code:'ArrowRight',
+          bubbles:true
+        }));
+        document.dispatchEvent(new KeyboardEvent('keyup',{
+          key:'ArrowRight',
+          code:'ArrowRight',
+          bubbles:true
+        }));
+
         if(i===9){
           setTimeout(()=>{
-            target.removeEventListener('neon-core-input-test',testHandler);
+            inputTestActive=false;
             const ok=testInputEvents===10 && testInputActions===10;
             ui.inputTestResult.textContent=ok?'통과 10/10':'실패';
             ui.inputTestResult.style.color=ok?'#7cffcb':'#ff5f7a';
-          },30);
+          },40);
         }
       },i*45);
     }
@@ -1053,11 +1055,25 @@
 
   document.addEventListener('keydown',e=>{
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key))e.preventDefault();
+
+    // C06/C12 검사: 실제 핵심 입력 리스너에서 keydown 1건당 상태를 정확히 1번 변경합니다.
+    if(inputTestActive && e.key==='ArrowRight'){
+      testInputEvents++;
+      if(!keys[e.key]){
+        keys[e.key]=true;
+        testInputActions++;
+      }
+      updateInputTestUI();
+      return;
+    }
+
     if(e.code==='Space'){togglePause();return}
     if(e.code==='ShiftLeft'||e.code==='ShiftRight'){triggerDash();return}
     keys[e.key]=true;
   });
-  document.addEventListener('keyup',e=>keys[e.key]=false);
+  document.addEventListener('keyup',e=>{
+    keys[e.key]=false;
+  });
   window.addEventListener('blur',()=>{ if(running&&!paused&&!ended) togglePause(true); });
 
   $('startBtn').onclick=startGame;$('againBtn').onclick=startGame;$('restartBtn').onclick=startGame;
